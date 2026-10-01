@@ -20,17 +20,18 @@ describe('redesigned App.vue (DOM behavior)', () => {
   it('renders brand, empty state and 4 example prompts', async () => {
     const w = mount(App)
     expect(w.text()).toContain('DevAssist')
-    expect(w.text()).toContain('Your AI programming assistant with document-aware answers.')
-    for (const s of ['Explain this Python code', 'Debug my JavaScript function', 'Explain this document', 'Design a REST API'])
+    expect(w.text()).toContain('Your developer workspace is ready.')
+    for (const s of ['Explain this architecture', 'Analyze the uploaded documents',
+                     'Find requirements in the documents', 'Suggest an implementation approach'])
       expect(w.text()).toContain(s)
     expect(w.find('[data-testid="file-input"]').exists()).toBe(true)
     expect(w.find('[data-testid="send-button"]').attributes('disabled')).toBeDefined()
   })
   it('example prompt populates the input only (does not send)', async () => {
     const w = mount(App)
-    const btn = w.findAll('button').find(b => b.text().includes('Design a REST API'))
+    const btn = w.findAll('button').find(b => b.text().includes('Suggest an implementation approach'))
     await btn.trigger('click')
-    expect(w.find('[data-testid="chat-input"]').element.value).toBe('Design a REST API')
+    expect(w.find('[data-testid="chat-input"]').element.value).toBe('Suggest an implementation approach')
     expect(FakeWS.instance).toBeUndefined()
   })
   it('streams a markdown answer and decorates the code block (lang label + copy button)', async () => {

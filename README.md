@@ -31,6 +31,7 @@ npm run dev            # http://localhost:5173
 ## API
 - `POST /upload` — multipart file (.txt/.md/.pdf, < 5MB) → `{status, chunks_processed, filename}`
 - `GET /health`, `GET /documents`, `DELETE /documents`
+- `DELETE /documents/{filename}` — removes that one document's indexed chunks → `{status, filename, chunks_removed}` (404 if not indexed). Filename must be percent-encoded. The UI exposes this per document via each row's Remove button.
 - `WebSocket /ws/chat` — send `{"message": "..."}`, receive `{"token": "...", "status": "streaming"}` … `{"status": "done"}`
 
 ## RAG specifics (SRS §3.3)

@@ -6,6 +6,7 @@ import app.config as cfg
 cfg.settings.embedding_backend = "hash"
 from fastapi.testclient import TestClient
 from pypdf import PdfWriter
+import app.main as main_module
 from app.main import app, store
 from app.chunking import chunk_text
 from app.prompts import SYSTEM_PROMPT, build_prompt, RATE_LIMIT_MESSAGE
@@ -80,6 +81,42 @@ def test_upload_rejects_oversize():
     r = client.post("/upload", files={"file": ("big.txt", io.BytesIO(big), "text/plain")})
     assert r.status_code == 413
 
+def test_delete_single_document_removes_only_its_chunks():
+    a = client.post("/upload", files={"file": ("alpha.txt", io.BytesIO(b"alpha doc "*40), "text/plain")})
+    b = client.post("/upload", files={"file": ("beta.md", io.BytesIO(b"# Beta\n\nbeta doc "*40), "text/markdown")})
+    assert a.status_code == 200 and b.status_code == 200
+    n_a, n_b = a.json()["chunks_processed"], b.json()["chunks_processed"]
+    assert len(store) == n_a + n_b
+
+    r = client.delete("/documents/beta.md")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "removed" and body["filename"] == "beta.md"
+    assert body["chunks_removed"] == n_b
+    # only that document is gone; the other survives intact
+    assert len(store) == n_a
+    assert store.sources.count("alpha.txt") == n_a
+    assert "beta.md" not in store.sources
+    assert client.get("/documents").json()["files"] == {"alpha.txt": n_a}
+
+def test_delete_document_handles_spaces_and_missing_file():
+    up = client.post("/upload", files={"file": ("my notes v1.md", io.BytesIO(b"# notes\n\n"*40), "text/markdown")})
+    assert up.status_code == 200
+    from urllib.parse import quote
+    r = client.delete("/documents/" + quote("my notes v1.md"))
+    assert r.status_code == 200 and r.json()["chunks_removed"] == up.json()["chunks_processed"]
+    assert len(store) == 0
+    # unknown document -> 404, and the index is untouched
+    assert client.delete("/documents/never-indexed.txt").status_code == 404
+    assert len(store) == 0
+
+def test_delete_single_document_still_serves_retrieval():
+    client.post("/upload", files={"file": ("keep.txt", io.BytesIO(b"keep me "*40), "text/plain")})
+    client.post("/upload", files={"file": ("drop.txt", io.BytesIO(b"drop me "*40), "text/plain")})
+    client.delete("/documents/drop.txt")
+    hits = store.search(HashEmbedder().encode(["keep me"]), top_k=20)
+    assert hits and all("drop me" not in h for h in hits), hits
+
 def test_websocket_streaming_and_done():
     with client.websocket_connect("/ws/chat") as ws:
         ws.send_json({"message": "How do I write a Python function?"})
@@ -91,18 +128,83 @@ def test_websocket_streaming_and_done():
             else: raise AssertionError(f"unexpected {msg}")
         assert "Python" in tokens or "programming" in tokens.lower() or "Offline" in tokens
 
-def test_websocket_uses_rag_context():
+def test_websocket_uses_rag_context(monkeypatch):
+    """SRS 3.3/2.2: the question is answered WITH retrieved document context.
+
+    Asserts the real contract — that top-k chunks retrieved from the vector store
+    are injected into the system prompt handed to the model. It deliberately does
+    NOT assert on the offline mock's canned wording, which a real model will never
+    emit; the test must hold whether GROQ_API_KEY is set or not.
+    """
     data = ("ZebraDB is a fictional database whose port is 9876 and driver is zebra-py. " * 10).encode()
     client.post("/upload", files={"file": ("z.txt", io.BytesIO(data), "text/plain")})
+    assert len(store) > 0, "upload should have populated the vector store"
+
+    captured = {}
+
+    async def fake_stream_chat(messages, api_key, model):
+        captured["messages"] = messages
+        captured["api_key_present"] = bool(api_key)
+        captured["model"] = model
+        yield "ZebraDB uses port **9876**."
+
+    monkeypatch.setattr(main_module, "stream_chat", fake_stream_chat)
+
     with client.websocket_connect("/ws/chat") as ws:
         ws.send_json({"message": "What port does ZebraDB use?"})
         tokens = ""
         while True:
             msg = ws.receive_json()
-            if msg.get("status") == "done": break
+            if msg.get("status") == "done":
+                break
             tokens += msg.get("token", "")
-        # offline mock confirms context was retrieved/used
-        assert "uploaded document context" in tokens
+
+    system_prompt = captured["messages"][0]["content"]
+    assert "ZebraDB" in system_prompt, "retrieved document chunk missing from system prompt"
+    assert "9876" in system_prompt, "retrieved document chunk missing from system prompt"
+    # RAG context must be appended to the programming-only system prompt.
+    assert "strictly answer questions related to software engineering" in system_prompt
+    # The user turn is still the question, unmodified.
+    assert captured["messages"][-1] == {"role": "user", "content": "What port does ZebraDB use?"}
+    assert "9876" in tokens
+
+def test_websocket_without_documents_sends_no_context(monkeypatch):
+    """With an empty store the system prompt must be the bare guardrail prompt."""
+    store.clear()
+    captured = {}
+
+    async def fake_stream_chat(messages, api_key, model):
+        captured["messages"] = messages
+        yield "ok"
+
+    monkeypatch.setattr(main_module, "stream_chat", fake_stream_chat)
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json({"message": "What is Python?"})
+        while True:
+            if ws.receive_json().get("status") == "done":
+                break
+    assert captured["messages"][0]["content"] == SYSTEM_PROMPT
+
+def test_retrieval_context_respects_char_cap(monkeypatch):
+    """SRS 5.2: retrieved context stays under max_context_chars (<4000 tokens)."""
+    big = ("ZebraDB supports high availability across regions. " * 400).encode()
+    client.post("/upload", files={"file": ("big.txt", io.BytesIO(big), "text/plain")})
+    captured = {}
+
+    async def fake_stream_chat(messages, api_key, model):
+        captured["messages"] = messages
+        yield "ok"
+
+    monkeypatch.setattr(main_module, "stream_chat", fake_stream_chat)
+    with client.websocket_connect("/ws/chat") as ws:
+        ws.send_json({"message": "Describe ZebraDB availability."})
+        while True:
+            if ws.receive_json().get("status") == "done":
+                break
+    system_prompt = captured["messages"][0]["content"]
+    # everything after the fixed guardrail sentence is retrieved context
+    context = system_prompt.split("Use the following retrieved document context if relevant:")[-1]
+    assert len(context.strip()) <= cfg.settings.max_context_chars
 
 def test_websocket_empty_message_error():
     with client.websocket_connect("/ws/chat") as ws:

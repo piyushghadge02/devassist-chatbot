@@ -1,60 +1,140 @@
-@import 'highlight.js/styles/github.css';
+/* DevAssist — dark technical theme (UI/UX redesign, 2026-10-01).
+   Syntax highlighting theme switched github -> github-dark-dimmed to match the
+   dark workspace. No dependency changes: still marked + marked-highlight +
+   highlight.js + DOMPurify (see src/lib/chat.js). */
+@import 'highlight.js/styles/github-dark-dimmed.css';
 @tailwind base; @tailwind components; @tailwind utilities;
 
 @layer base {
-  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
-  body { @apply bg-[#f4f5fa] text-slate-800 font-sans; }
-  ::selection { background: #c7d2fe; }
-  :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    color-scheme: dark;
+  }
+  body { @apply bg-canvas text-ink-2 font-sans antialiased; }
+  /* Never let a wide code block or long word push the page sideways. */
+  html, body, #app { @apply h-full max-w-full overflow-x-hidden; }
+  ::selection { background: rgba(99, 102, 241, 0.38); color: #fff; }
+  :focus-visible {
+    outline: 2px solid #6366F1;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
-/* Slim, subtle scrollbars for chat panes */
-.slim-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
-.slim-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-.slim-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+/* Very subtle technical atmosphere: one faint indigo wash + a 1px grid.
+   Static (no animation), extremely low contrast, never behind content panels. */
+.app-atmosphere {
+  background-color: #0B1120;
+  background-image:
+    radial-gradient(60rem 40rem at 78% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+    radial-gradient(48rem 34rem at 6% 108%, rgba(34, 211, 238, 0.055), transparent 62%),
+    linear-gradient(to right, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 56px 56px, 56px 56px;
+}
+
+/* Slim, dark scrollbars for the chat + explorer panes */
+.slim-scroll { scrollbar-width: thin; scrollbar-color: #263248 transparent; }
+.slim-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.slim-scroll::-webkit-scrollbar-thumb { background: #263248; border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+.slim-scroll::-webkit-scrollbar-thumb:hover { background: #33415c; background-clip: content-box; }
 .slim-scroll::-webkit-scrollbar-track { background: transparent; }
 
+/* ---------- Workspace chrome ---------- */
+.section-label {
+  @apply font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-4;
+}
+.mono-meta { @apply font-mono text-[11px] tracking-tight text-ink-4; }
+.status-dot { @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full; }
+
 /* ---------- Rendered Markdown (assistant messages) ---------- */
-.markdown-body { @apply text-[15px] leading-7 text-slate-700 break-words; }
+.markdown-body {
+  @apply text-[15px] leading-[1.75] text-ink-2 break-words;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .markdown-body > *:first-child { margin-top: 0; }
 .markdown-body > *:last-child { margin-bottom: 0; }
-.markdown-body p { margin: 0.55em 0; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
-  @apply font-semibold text-slate-900; margin: 1em 0 0.4em; line-height: 1.35;
+.markdown-body p { margin: 0.6em 0; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  @apply font-semibold text-ink; margin: 1.15em 0 0.45em; line-height: 1.3;
 }
-.markdown-body h1 { font-size: 1.25rem; } .markdown-body h2 { font-size: 1.125rem; }
-.markdown-body h3 { font-size: 1rem; } .markdown-body h4 { font-size: 0.925rem; }
-.markdown-body ul, .markdown-body ol { margin: 0.55em 0; padding-left: 1.4em; }
-.markdown-body ul { list-style: disc; } .markdown-body ol { list-style: decimal; }
-.markdown-body li { margin: 0.25em 0; }
-.markdown-body li::marker { color: #818cf8; }
-.markdown-body a { @apply text-indigo-600 font-medium underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700; }
-.markdown-body blockquote { @apply border-l-[3px] border-indigo-200 bg-indigo-50/50 text-slate-600 rounded-r-lg; margin: 0.7em 0; padding: 0.35em 0.9em; }
-.markdown-body hr { @apply border-slate-200; margin: 1em 0; }
-.markdown-body table { @apply w-full text-sm; border-collapse: collapse; margin: 0.7em 0; display: block; overflow-x: auto; }
-.markdown-body th, .markdown-body td { @apply border border-slate-200 px-3 py-1.5 text-left; }
-.markdown-body th { @apply bg-slate-50 font-semibold text-slate-800; }
-.markdown-body strong { @apply font-semibold text-slate-900; }
+.markdown-body h1 { font-size: 1.3rem; letter-spacing: -0.01em; }
+.markdown-body h2 { font-size: 1.15rem; letter-spacing: -0.01em; }
+.markdown-body h3 { font-size: 1.02rem; }
+.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: 0.925rem; }
+.markdown-body ul, .markdown-body ol { margin: 0.6em 0; padding-left: 1.35em; }
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li { margin: 0.28em 0; }
+.markdown-body li::marker { color: #6366F1; }
+.markdown-body li > ul, .markdown-body li > ol { margin: 0.25em 0; }
+.markdown-body a { @apply text-brand-soft font-medium underline decoration-brand/45 underline-offset-2 hover:text-ink; }
+.markdown-body strong { @apply font-semibold text-ink; }
+.markdown-body del { @apply text-ink-4; }
+.markdown-body blockquote {
+  @apply border-l-2 border-brand/60 bg-brand-wash text-ink-2 rounded-r-md;
+  margin: 0.75em 0; padding: 0.5em 0.95em;
+}
+.markdown-body hr { @apply border-edge; margin: 1.2em 0; }
+.markdown-body table { @apply w-full text-[13.5px]; border-collapse: collapse; margin: 0.85em 0; display: block; overflow-x: auto; }
+.markdown-body th, .markdown-body td { @apply border border-edge px-3 py-1.5 text-left align-top; }
+.markdown-body th { @apply bg-raised font-semibold text-ink; }
+.markdown-body tbody tr:nth-child(even) { background: rgba(21, 29, 46, 0.5); }
 /* Inline code */
 .markdown-body :not(pre) > code {
-  @apply font-mono text-[0.85em] bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-md px-1.5 py-0.5;
-}
-/* Fenced code — decorated by the v-enhance directive into .code-block */
-.markdown-body pre { margin: 0.8em 0; }
-.markdown-body pre code { @apply font-mono text-[13px] leading-6; background: transparent; padding: 0; }
-.code-block { @apply rounded-xl border border-slate-200 bg-[#f8fafc] overflow-hidden my-[0.8em]; }
-.code-block pre { margin: 0; overflow-x: auto; padding: 14px 16px; }
-.code-block-header {
-  @apply flex items-center justify-between pl-4 pr-2 py-1.5 bg-white border-b border-slate-200 select-none;
-}
-.code-block-lang { @apply font-mono text-[11px] font-medium uppercase tracking-wider text-slate-400; }
-.code-copy-btn {
-  @apply inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500
-    transition-colors hover:bg-indigo-50 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400;
+  @apply font-mono text-[0.85em] bg-raised text-signal-soft border border-edge rounded px-1.5 py-0.5;
+  word-break: break-word;
 }
 
-/* Streaming typing dots */
-.typing-dots span { @apply inline-block h-[7px] w-[7px] rounded-full bg-indigo-400; animation: typing-dot 1.2s ease-in-out infinite; }
-.typing-dots span:nth-child(2) { animation-delay: 0.15s; }
-.typing-dots span:nth-child(3) { animation-delay: 0.3s; }
-@keyframes typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-3px); opacity: 1; } }
+/* ---------- Code blocks (decorated by the v-enhance directive) ---------- */
+.markdown-body pre { margin: 0.9em 0; }
+/* highlight.js ships its own background + overflow rules. Let <pre> be the
+   horizontal scroll container so long lines scroll inside the block (with the
+   scrollbar on the block's own edge) and never widen the page. */
+.code-block pre code.hljs,
+.markdown-body pre code.hljs { background: transparent; padding: 0; overflow-x: visible; }
+.code-block pre code { @apply font-mono text-[12.5px] leading-[1.7]; background: transparent; padding: 0; }
+.code-block {
+  @apply rounded-panel border border-edge bg-terminal overflow-hidden my-[0.9em];
+  max-width: 100%;
+}
+.code-block pre {
+  margin: 0;
+  overflow-x: auto;
+  padding: 14px 16px;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+.code-block-header {
+  @apply flex items-center justify-between gap-2 pl-3.5 pr-2 py-1.5 bg-raised/70 border-b border-edge select-none;
+}
+.code-block-lang {
+  @apply font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink-4;
+}
+.code-copy-btn {
+  @apply inline-flex items-center gap-1 rounded-control px-2 py-1 text-[11px] font-medium text-ink-3
+    transition-colors hover:bg-brand-wash hover:text-ink
+    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand;
+}
+
+/* ---------- Streaming typing dots (calm, low-amplitude) ---------- */
+.typing-dots span {
+  @apply inline-block h-[6px] w-[6px] rounded-full bg-brand-soft;
+  animation: typing-dot 1.25s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.14s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.28s; }
+@keyframes typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .3; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+/* ---------- Reduced motion: honour the OS preference ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-pulse-line { display: none; }
+}

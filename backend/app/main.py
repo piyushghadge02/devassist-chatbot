@@ -63,6 +63,15 @@ def documents():
 def clear_documents():
     store.clear(); return {"status": "cleared"}
 
+@app.delete("/documents/{filename}")
+def delete_document(filename: str):
+    """Remove one document's indexed chunks. The filename must match the value
+    reported by GET /documents (it is percent-encoded by the client)."""
+    removed = store.remove_source(filename)
+    if removed == 0:
+        raise HTTPException(status_code=404, detail="Document is not in the index.")
+    return {"status": "removed", "filename": filename, "chunks_removed": removed}
+
 @app.websocket("/ws/chat")
 async def ws_chat(ws: WebSocket):
     """SRS 4.2 WebSocket /ws/chat — streaming tokens."""
