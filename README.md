@@ -5,7 +5,7 @@ Programming-only assistant with rudimentary RAG, per SRS v1.0 (24 Nov 2025).
 ## Stack
 - Frontend: Vue 3 (Composition API) + Vite + TailwindCSS, Markdown + syntax highlighting (marked + highlight.js + DOMPurify)
 - Backend: Python FastAPI (async), WebSocket streaming
-- AI: Groq Cloud API (model configurable, default `llama3-70b-8192` per SRS; e.g. set `GROQ_MODEL=llama-3.3-70b-versatile` if your Groq account no longer offers the legacy ID)
+- AI: Groq Cloud API (model configurable via `GROQ_MODEL`; the SRS-listed `llama3-70b-8192`/`mixtral-8x7b-32768` were decommissioned by Groq — verified live 2026-10-01 — so the working default is `openai/gpt-oss-120b`)
 - Vector store: FAISS (in-memory; NumPy cosine fallback with identical interface if faiss-cpu is unavailable)
 - Embeddings: `sentence-transformers/all-MiniLM-L6-v2` locally (384-dim). `EMBEDDING_BACKEND=hash` selects a deterministic offline embedder with the same dimension — useful for tests / no-download environments.
 

@@ -6,4 +6,5 @@ pypdf>=4.0
 numpy>=1.26
 faiss-cpu>=1.8
 sentence-transformers>=2.7
+langchain>=1.0
 groq>=0.9
