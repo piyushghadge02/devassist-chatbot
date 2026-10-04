@@ -2,8 +2,20 @@
 import { ref, shallowRef, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { renderMarkdown, canSend, validateUpload, createChatSocket, RATE_LIMIT_MESSAGE } from './lib/chat.js'
 
-const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/chat'
+/* In development the Vite dev server (5173) talks to the API on 8000, so an absolute
+   base is required. In the production build FastAPI serves this same bundle on the
+   same origin, so requests stay relative and the WebSocket follows the current host
+   (ws:// for HTTP, wss:// for HTTPS/ngrok). The host is never hardcoded. */
+const DEV = import.meta.env.DEV
+const envAPI = import.meta.env.VITE_API_BASE
+const API = envAPI || (DEV ? 'http://localhost:8000' : '')
+
+function resolveWsUrl() {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${scheme}//${window.location.host}/ws/chat`
+}
+const WS_URL = resolveWsUrl()
 
 /* ---------------- Session state (no persistence — SRS 3.1) ---------------- */
 const messages = ref([]) // session only — refresh clears history
@@ -14,6 +26,7 @@ const uploadStatus = ref('')
 const uploadState = ref('idle') // idle | uploading | success | error (UI state only)
 const dragOver = ref(false)
 const sidebarOpen = ref(false)
+const selectedDocument = ref('') // currently selected document for scoped chat
 // shallowRef: a WebSocket must stay the raw object so `socket.value === ws` identity
 // checks in the drop handler work (a deep `ref` would hand back a reactive proxy).
 const socket = shallowRef(null)
@@ -115,6 +128,8 @@ async function handleFile(file) {
     const body = await res.json()
     if (!res.ok) throw new Error(body.detail || 'Upload failed')
     uploaded.value.push(body)
+    // Auto-select the newly uploaded document for scoped chat
+    selectedDocument.value = body.filename
     uploadState.value = 'success'
     uploadStatus.value = `Indexed ${body.filename}: ${body.chunks_processed} chunks`
   } catch (e) {
@@ -140,6 +155,10 @@ async function removeDocument(entry) {
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.detail || 'Could not remove document')
     uploaded.value = uploaded.value.filter(f => f.filename !== name)
+    // If the removed document was selected, clear selection or pick another
+    if (selectedDocument.value === name) {
+      selectedDocument.value = uploaded.value.length > 0 ? uploaded.value[0].filename : ''
+    }
     uploadState.value = 'success'
     uploadStatus.value = `Removed ${name} (${body.chunks_removed} chunks). ${fileCount.value} file${fileCount.value === 1 ? '' : 's'} · ${totalChunks.value} chunks`
   } catch (e) {
@@ -158,6 +177,11 @@ function onDrop(event) {
   handleFile(event.dataTransfer?.files?.[0])
 }
 
+/* ---------------- Document selection ---------------- */
+function selectDocument(filename) {
+  selectedDocument.value = selectedDocument.value === filename ? '' : filename
+}
+
 /* ---------------- Chat ---------------- */
 function pickSuggestion(text) {
   input.value = text
@@ -171,13 +195,21 @@ function newChat() {
 }
 function send() {
   if (!canSend(input.value, isGenerating.value)) return
+  // If documents exist but the selected one is no longer in the list, clear selection
+  if (selectedDocument.value && !uploaded.value.some(f => f.filename === selectedDocument.value)) {
+    selectedDocument.value = ''
+  }
   const text = input.value.trim(); input.value = ''
   pendingPrompt.value = text
   messages.value.push({ role: 'user', content: text })
   messages.value.push({ role: 'assistant', content: '' })
   isGenerating.value = true
   const ws = ensureSocket()
-  const payload = JSON.stringify({ message: text })
+  // Only send document_id if a valid document is selected
+  const docId = (selectedDocument.value && uploaded.value.some(f => f.filename === selectedDocument.value))
+    ? selectedDocument.value
+    : ''
+  const payload = JSON.stringify({ message: text, document_id: docId })
   if (ws.readyState === 1) ws.send(payload)
   else ws.addEventListener('open', () => ws.send(payload), { once: true })
 }
@@ -319,7 +351,9 @@ const vEnhance = { mounted: decorateCodeBlocks, updated: decorateCodeBlocks }
             <!-- Indexed documents -->
             <ul v-if="uploaded.length" class="mt-2.5 space-y-1 border-t border-edge pt-2.5" aria-label="Indexed documents">
               <li v-for="(f, i) in uploaded" :key="f.filename + i"
-                class="group flex items-center gap-2 rounded-control border border-transparent bg-terminal px-2 py-1.5 transition hover:border-edge hover:bg-raised">
+                class="group flex items-center gap-2 rounded-control border border-transparent bg-terminal px-2 py-1.5 transition hover:border-edge hover:bg-raised cursor-pointer"
+                @click="selectDocument(f.filename)"
+                :class="{ 'ring-2 ring-brand/50 bg-brand-wash': selectedDocument === f.filename }">
                 <span class="grid h-6 w-6 shrink-0 place-items-center rounded border font-mono text-[8.5px] font-bold tracking-tight"
                   :class="fileKind(f.filename).cls" aria-hidden="true">{{ fileKind(f.filename).tag }}</span>
                 <span class="min-w-0 flex-1">
@@ -329,11 +363,14 @@ const vEnhance = { mounted: decorateCodeBlocks, updated: decorateCodeBlocks }
                 <span class="inline-flex shrink-0 items-center gap-1 font-mono text-[9.5px] font-semibold uppercase tracking-wider text-ok">
                   <span class="status-dot bg-ok" aria-hidden="true"></span>Ready
                 </span>
+                <span v-if="selectedDocument === f.filename" class="ml-auto inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold uppercase tracking-wider text-brand-soft">
+                  <span class="status-dot bg-brand-soft" aria-hidden="true"></span>Selected
+                </span>
                 <button type="button" data-testid="remove-doc"
                   :disabled="removing !== '' || isGenerating"
                   class="grid h-6 w-6 shrink-0 place-items-center rounded border border-edge bg-panel text-ink-4 transition hover:border-danger/45 hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-edge disabled:hover:bg-panel disabled:hover:text-ink-4"
                   :aria-label="`Remove ${f.filename} from the index`"
-                  @click="removeDocument(f)">
+                  @click.stop="removeDocument(f)">
                   <svg v-if="removing !== f.filename" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M9 11v6M15 11v6M6 7l1 13h10l1-13"/></svg>
                   <svg v-else class="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"/></svg>
                 </button>
@@ -380,7 +417,7 @@ const vEnhance = { mounted: decorateCodeBlocks, updated: decorateCodeBlocks }
         <div class="min-w-0 flex-1">
           <p class="truncate text-[13px] font-semibold leading-tight text-ink">Chat workspace</p>
           <p class="truncate font-mono text-[10.5px] leading-tight text-ink-4">
-            {{ fileCount ? `${totalChunks} chunks indexed from ${fileCount} file${fileCount === 1 ? '' : 's'}` : 'no documents indexed yet' }}
+            {{ selectedDocument ? `Chatting with: ${selectedDocument}` : fileCount ? `${totalChunks} chunks indexed from ${fileCount} file${fileCount === 1 ? '' : 's'} — select a document to chat` : 'no documents indexed yet' }}
           </p>
         </div>
 

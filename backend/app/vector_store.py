@@ -35,8 +35,8 @@ class VectorStore:
         self.chunks.extend(chunks); self.sources.extend([source] * len(chunks))
         self.vectors.extend(emb[i] for i in range(emb.shape[0]))
         return len(chunks)
-    def search(self, query_embedding: np.ndarray, top_k: int = 3) -> list[str]:
-        """SRS: retrieval is Top 3."""
+    def search(self, query_embedding: np.ndarray, top_k: int = 3, source: str | None = None) -> list[str]:
+        """SRS: retrieval is Top 3. Optionally filter by source document."""
         if len(self.chunks) == 0: return []
         k = min(top_k, len(self.chunks))
         q = np.array(query_embedding, dtype="float32")
@@ -46,6 +46,8 @@ class VectorStore:
         else:
             n = np.linalg.norm(q); qn = q / n if n else q
             scores = (self._matrix @ qn.T).ravel(); indices = np.argsort(-scores)[:k].tolist()
+        if source is not None:
+            indices = [i for i in indices if 0 <= i < len(self.chunks) and self.sources[i] == source]
         return [self.chunks[i] for i in indices if 0 <= i < len(self.chunks)]
     def clear(self):
         self.chunks.clear(); self.sources.clear(); self.vectors.clear()

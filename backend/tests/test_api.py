@@ -151,7 +151,7 @@ def test_websocket_uses_rag_context(monkeypatch):
     monkeypatch.setattr(main_module, "stream_chat", fake_stream_chat)
 
     with client.websocket_connect("/ws/chat") as ws:
-        ws.send_json({"message": "What port does ZebraDB use?"})
+        ws.send_json({"message": "What port does ZebraDB use?", "document_id": "z.txt"})
         tokens = ""
         while True:
             msg = ws.receive_json()
